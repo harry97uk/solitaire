@@ -1,12 +1,11 @@
-use image_resizing::image_resizing::{ resized_image_exists, resize_image };
-use sdl2::{ render::TextureCreator, video::WindowContext };
-pub use sdl2::{
+use sdl2::{
+    render::{ Texture, TextureCreator },
     rect::{ Point, Rect },
-    render::{ Texture, WindowCanvas, Canvas },
+    video::WindowContext,
     image::LoadTexture,
-    video::Window,
 };
-pub mod image_resizing;
+
+use crate::image_resizing::{ resized_image_exists, resize_image };
 
 #[derive(Copy, Clone, Debug)]
 pub enum Suit {
@@ -25,21 +24,29 @@ pub enum Rank {
     King,
 }
 
+#[derive(Copy, Clone)]
 pub struct Card<'a> {
-    pub texture: &'a Texture<'a>,
+    pub front_texture: &'a Texture<'a>,
+    pub back_texture: &'a Texture<'a>,
     pub position: Point,
     pub sprite: Rect,
     pub suit: Suit,
     pub rank: Rank,
+    pub visible: bool,
 }
 
 impl<'a> Card<'a> {
-    pub fn new(texture: &'a Texture<'a>, suit: Suit, rank: Rank, offset: i32) -> Self {
-        let position = Point::new(50 + offset, 50);
+    pub fn new(
+        texture: &'a Texture<'a>,
+        back_texture: &'a Texture,
+        suit: Suit,
+        rank: Rank
+    ) -> Self {
+        let position = Point::new(50, 100);
         // src position in the spritesheet
         let sprite = Rect::new(0, 0, texture.query().width, texture.query().height);
 
-        Card { texture, position, sprite, suit, rank }
+        Card { front_texture: texture, back_texture, position, sprite, suit, rank, visible: false }
     }
 }
 
@@ -48,7 +55,7 @@ pub struct Deck<'a> {
     pub cards: Vec<Card<'a>>,
 }
 
-pub fn create_card_textures(texture_creator: &TextureCreator<WindowContext>) -> Vec<Texture> {
+pub fn create_card_front_textures(texture_creator: &TextureCreator<WindowContext>) -> Vec<Texture> {
     // Load individual textures for each card
     let card_textures: Vec<Texture> = (0..52)
         .map(|i| {
@@ -67,6 +74,16 @@ pub fn create_card_textures(texture_creator: &TextureCreator<WindowContext>) -> 
         .collect();
 
     card_textures
+}
+
+pub fn create_card_back_texture(texture_creator: &TextureCreator<WindowContext>) -> Texture {
+    let path = format!("src/assets/playing_cards/original/card_back.png");
+    if !resized_image_exists(&path) {
+        resize_image(&path);
+    }
+    texture_creator
+        .load_texture(&path.replace("original", "resized"))
+        .expect(&format!("could not load texture: {}", path))
 }
 
 fn convert_number_to_card_strings(x: i32) -> (String, String) {
@@ -126,28 +143,19 @@ fn convert_number_to_card_struct_enums(x: i32) -> (Rank, Suit) {
     (rank, suit)
 }
 
-pub fn initialise_cards<'a>(card_textures: &'a Vec<Texture<'a>>) -> Deck {
+pub fn initialise_cards<'a>(
+    card_textures: &'a Vec<Texture<'a>>,
+    back_texture: &'a Texture
+) -> Deck<'a> {
     let mut cards: Vec<Card> = vec![];
 
     for i in 0..52 {
         let card_enums = convert_number_to_card_struct_enums(i);
-        let card = Card::new(&card_textures[i as usize], card_enums.1, card_enums.0, i * 10);
+        let card = Card::new(&card_textures[i as usize], back_texture, card_enums.1, card_enums.0);
         cards.push(card);
     }
 
     let deck = Deck { cards };
 
     deck
-}
-
-pub fn render_card(
-    canvas: &mut WindowCanvas,
-    texture: &Texture,
-    card: &Card
-) -> Result<(), String> {
-    let screen_rect = Rect::from_center(card.position, card.sprite.width(), card.sprite.height());
-
-    canvas.copy(texture, None, screen_rect)?;
-
-    Ok(())
 }
